@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortalUser, getPortalUsers, getFolders, getAllFolders, getFiles, deleteFolder, deleteFile, createFolder, uploadFile, downloadFileUrl, deletePortalUser, updatePortalUser, getUploadProgress, createShareLink, publicShareUrl, moveFile, getSettings, updateSettings, getStorageSummary } from '../api';
-import { Folder, File as FileIcon, Trash2, Upload, Plus, ChevronRight, Home, Loader, X, Users, Link, MoveRight, Pencil, Search, Grid3X3, List, HardDrive, LogOut, Cloud, Moon, Sun } from 'lucide-react';
+import { Folder, File as FileIcon, Trash2, Upload, Plus, ChevronRight, Home, Loader, X, Users, Link, MoveRight, Pencil, Search, Grid3X3, List, HardDrive, LogOut, Cloud, Moon, Sun, Eye, Download } from 'lucide-react';
 
 const FolderTree = ({ parentId = null, level = 0, selectedId, onSelect }) => {
   const [folders, setFolders] = useState([]);
@@ -88,6 +88,10 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
     current_size: 0,
     folder_sizes: {},
   });
+  const [previewFile, setPreviewFile] = useState(null);
+  const [previewText, setPreviewText] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -252,6 +256,35 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
       alert('Share link copied to clipboard');
     } catch (err) {
       prompt('Share link', url);
+    }
+  };
+
+  const fileExtension = (name = '') => name.split('.').pop()?.toLowerCase() || '';
+  const isPdfFile = (file) => file.mime_type === 'application/pdf' || fileExtension(file.name) === 'pdf';
+  const isTextFile = (file) => {
+    const ext = fileExtension(file.name);
+    return file.mime_type?.startsWith('text/') || ['txt', 'md', 'csv', 'json', 'xml', 'log', 'yaml', 'yml', 'ini', 'env'].includes(ext);
+  };
+  const canPreviewFile = (file) => isPdfFile(file) || isTextFile(file) || ['doc', 'docx', 'rtf'].includes(fileExtension(file.name));
+
+  const openPreviewFile = async (file) => {
+    setPreviewFile(file);
+    setPreviewText('');
+    setPreviewError('');
+    if (!isTextFile(file)) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setPreviewError('Text preview is limited to 5 MB. Download the file to view it locally.');
+      return;
+    }
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(downloadFileUrl(file.id));
+      if (!res.ok) throw new Error('Preview failed');
+      setPreviewText(await res.text());
+    } catch (err) {
+      setPreviewError(err.message || 'Preview failed');
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -507,13 +540,14 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
                 <span>Name</span><span>Size</span><span className="text-right">Actions</span>
               </div>
               {[...visibleFolders.map(item => ({ ...item, kind: 'folder' })), ...visibleFiles.map(item => ({ ...item, kind: 'file' }))].map(item => (
-                <div key={`${item.kind}-${item.id}`} onClick={() => item.kind === 'folder' ? enterFolder(item) : window.open(downloadFileUrl(item.id), '_blank')} className="grid cursor-pointer grid-cols-[1fr_110px_120px] items-center border-b border-gray-50 px-4 py-3 last:border-0 hover:bg-blue-50/60">
+                <div key={`${item.kind}-${item.id}`} onClick={() => item.kind === 'folder' ? enterFolder(item) : canPreviewFile(item) ? openPreviewFile(item) : window.open(downloadFileUrl(item.id), '_blank')} className="grid cursor-pointer grid-cols-[1fr_110px_120px] items-center border-b border-gray-50 px-4 py-3 last:border-0 hover:bg-blue-50/60">
                   <div className="flex min-w-0 items-center gap-3">
                     {item.kind === 'folder' ? <Folder className="h-5 w-5 shrink-0 text-amber-500" /> : <FileIcon className="h-5 w-5 shrink-0 text-blue-500" />}
                     <span className="truncate text-sm font-medium text-gray-800">{item.name}</span>
                   </div>
                   <span className="text-sm text-gray-500">{item.kind === 'folder' ? formatSize(folderSize(item.id)) : formatSize(item.size)}</span>
                   <div className="flex justify-end gap-1">
+                    {item.kind === 'file' && canPreviewFile(item) && <button onClick={(e) => { e.stopPropagation(); openPreviewFile(item); }} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100" title="Preview"><Eye className="h-4 w-4" /></button>}
                     {item.kind === 'file' && <button onClick={(e) => { e.stopPropagation(); handleShareFile(item.id); }} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Copy share link"><Link className="h-4 w-4" /></button>}
                     {item.kind === 'file' && <button onClick={(e) => { e.stopPropagation(); openMoveFile(item); }} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100" title="Move"><MoveRight className="h-4 w-4" /></button>}
                     <button onClick={(e) => { e.stopPropagation(); item.kind === 'folder' ? handleDeleteFolder(item.id) : handleDeleteFile(item.id); }} className="rounded-lg p-2 text-red-500 hover:bg-red-50" title="Delete"><Trash2 className="h-4 w-4" /></button>
@@ -537,10 +571,15 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
                 </div>
               ))}
               {visibleFiles.map(file => (
-                <div key={file.id} className="group relative cursor-pointer rounded-xl border border-gray-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-sm" onClick={() => window.open(downloadFileUrl(file.id), '_blank')}>
+                <div key={file.id} className="group relative cursor-pointer rounded-xl border border-gray-200 bg-white p-4 transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-sm" onClick={() => canPreviewFile(file) ? openPreviewFile(file) : window.open(downloadFileUrl(file.id), '_blank')}>
                   <div className="flex items-center justify-between mb-2">
                     <FileIcon className="w-10 h-10 text-blue-500" />
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                      {canPreviewFile(file) && (
+                        <button onClick={(e) => { e.stopPropagation(); openPreviewFile(file); }} className="p-1 text-gray-600 hover:bg-gray-100 rounded" title="Preview">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      )}
                       <button onClick={(e) => { e.stopPropagation(); handleShareFile(file.id); }} className="p-1 text-blue-500 hover:bg-blue-50 rounded" title="Copy share link">
                         <Link className="w-4 h-4" />
                       </button>
@@ -661,6 +700,49 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
               </div>
               <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">Move</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {previewFile && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div className="min-w-0">
+                <h3 className="truncate text-lg font-bold text-gray-900">{previewFile.name}</h3>
+                <p className="text-xs text-gray-500">{formatSize(previewFile.size)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => window.open(downloadFileUrl(previewFile.id), '_blank')} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100" title="Download">
+                  <Download className="h-5 w-5" />
+                </button>
+                <button onClick={() => setPreviewFile(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Close">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 bg-gray-50">
+              {isPdfFile(previewFile) ? (
+                <iframe title={previewFile.name} src={downloadFileUrl(previewFile.id)} className="h-full w-full" />
+              ) : isTextFile(previewFile) ? (
+                <div className="h-full overflow-auto p-5">
+                  {previewLoading ? (
+                    <div className="flex h-full items-center justify-center"><Loader className="h-8 w-8 animate-spin text-blue-600" /></div>
+                  ) : previewError ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{previewError}</div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap break-words rounded-lg bg-white p-4 text-sm leading-6 text-gray-800">{previewText}</pre>
+                  )}
+                </div>
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+                  <FileIcon className="mb-4 h-12 w-12 text-blue-500" />
+                  <h4 className="text-lg font-semibold text-gray-900">Preview is not available for this document type</h4>
+                  <p className="mt-2 max-w-md text-sm text-gray-500">Download the file to view it in the app that supports this format.</p>
+                  <button onClick={() => window.open(downloadFileUrl(previewFile.id), '_blank')} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Download</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { portalCreateFolder, portalCreateShareLink, portalDownloadFileUrl, portalGetFiles, portalGetFolders, portalGetSettings, portalGetUploadProgress, portalMe, portalUploadFile, publicShareUrl } from '../api';
-import { ChevronRight, File as FileIcon, Folder, Home, Link, Loader, LogOut, Moon, Plus, Sun, Upload, X } from 'lucide-react';
+import { ChevronRight, Download, Eye, File as FileIcon, Folder, Home, Link, Loader, LogOut, Moon, Plus, Sun, Upload, X } from 'lucide-react';
 
 const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [currentFolderId, setCurrentFolderId] = useState(null);
@@ -18,6 +18,10 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadTasks, setUploadTasks] = useState([]);
   const [driveName, setDriveName] = useState('My Drive');
+  const [previewFile, setPreviewFile] = useState(null);
+  const [previewText, setPreviewText] = useState('');
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -170,6 +174,35 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
     }
   };
 
+  const fileExtension = (name = '') => name.split('.').pop()?.toLowerCase() || '';
+  const isPdfFile = (file) => file.mime_type === 'application/pdf' || fileExtension(file.name) === 'pdf';
+  const isTextFile = (file) => {
+    const ext = fileExtension(file.name);
+    return file.mime_type?.startsWith('text/') || ['txt', 'md', 'csv', 'json', 'xml', 'log', 'yaml', 'yml', 'ini', 'env'].includes(ext);
+  };
+  const canPreviewFile = (file) => isPdfFile(file) || isTextFile(file) || ['doc', 'docx', 'rtf'].includes(fileExtension(file.name));
+
+  const openPreviewFile = async (file) => {
+    setPreviewFile(file);
+    setPreviewText('');
+    setPreviewError('');
+    if (!isTextFile(file)) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setPreviewError('Text preview is limited to 5 MB. Download the file to view it locally.');
+      return;
+    }
+    setPreviewLoading(true);
+    try {
+      const res = await fetch(portalDownloadFileUrl(file.id));
+      if (!res.ok) throw new Error('Preview failed');
+      setPreviewText(await res.text());
+    } catch (err) {
+      setPreviewError(err.message || 'Preview failed');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
   const formatSize = (bytes) => {
     if (!bytes) return '0 B';
     const k = 1024;
@@ -256,12 +289,19 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
                 </div>
               ))}
               {files.map(file => (
-                <div key={file.id} className="group relative bg-white p-4 rounded-xl border border-gray-200 hover:shadow-md transition cursor-pointer" onClick={() => window.open(portalDownloadFileUrl(file.id), '_blank')}>
+                <div key={file.id} className="group relative bg-white p-4 rounded-xl border border-gray-200 hover:shadow-md transition cursor-pointer" onClick={() => canPreviewFile(file) ? openPreviewFile(file) : window.open(portalDownloadFileUrl(file.id), '_blank')}>
                   <div className="flex items-center justify-between mb-2">
                     <FileIcon className="w-10 h-10 text-blue-500" />
-                    <button onClick={(e) => { e.stopPropagation(); handleShareFile(file.id); }} className="opacity-0 group-hover:opacity-100 p-1 text-blue-500 hover:bg-blue-50 rounded transition" title="Copy share link">
-                      <Link className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                      {canPreviewFile(file) && (
+                        <button onClick={(e) => { e.stopPropagation(); openPreviewFile(file); }} className="p-1 text-gray-600 hover:bg-gray-100 rounded" title="Preview">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button onClick={(e) => { e.stopPropagation(); handleShareFile(file.id); }} className="p-1 text-blue-500 hover:bg-blue-50 rounded" title="Copy share link">
+                        <Link className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
                   <p className="text-xs text-gray-500 mt-1">{formatSize(file.size)}</p>
@@ -337,6 +377,49 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {previewFile && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
+              <div className="min-w-0">
+                <h3 className="truncate text-lg font-bold text-gray-900">{previewFile.name}</h3>
+                <p className="text-xs text-gray-500">{formatSize(previewFile.size)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => window.open(portalDownloadFileUrl(previewFile.id), '_blank')} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100" title="Download">
+                  <Download className="h-5 w-5" />
+                </button>
+                <button onClick={() => setPreviewFile(null)} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Close">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 bg-gray-50">
+              {isPdfFile(previewFile) ? (
+                <iframe title={previewFile.name} src={portalDownloadFileUrl(previewFile.id)} className="h-full w-full" />
+              ) : isTextFile(previewFile) ? (
+                <div className="h-full overflow-auto p-5">
+                  {previewLoading ? (
+                    <div className="flex h-full items-center justify-center"><Loader className="h-8 w-8 animate-spin text-blue-600" /></div>
+                  ) : previewError ? (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{previewError}</div>
+                  ) : (
+                    <pre className="whitespace-pre-wrap break-words rounded-lg bg-white p-4 text-sm leading-6 text-gray-800">{previewText}</pre>
+                  )}
+                </div>
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+                  <FileIcon className="mb-4 h-12 w-12 text-blue-500" />
+                  <h4 className="text-lg font-semibold text-gray-900">Preview is not available for this document type</h4>
+                  <p className="mt-2 max-w-md text-sm text-gray-500">Download the file to view it in the app that supports this format.</p>
+                  <button onClick={() => window.open(portalDownloadFileUrl(previewFile.id), '_blank')} className="mt-5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">Download</button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

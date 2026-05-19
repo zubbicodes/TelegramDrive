@@ -4,6 +4,7 @@ import aiofiles
 import hashlib
 import hmac
 import secrets
+import time
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException, Depends, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -135,7 +136,7 @@ def user_proxy_args(user):
         "proxy_password": user.get("proxy_password"),
     }
 
-def set_upload_progress(upload_id, percent, stage, done=False, error=None):
+def set_upload_progress(upload_id, percent, stage, done=False, error=None, bytes_done=None, bytes_total=None, speed_bps=None):
     if not upload_id:
         return
     UPLOAD_PROGRESS[upload_id] = {
@@ -143,15 +144,50 @@ def set_upload_progress(upload_id, percent, stage, done=False, error=None):
         "stage": stage,
         "done": done,
         "error": error,
+        "bytes_done": bytes_done,
+        "bytes_total": bytes_total,
+        "speed_bps": speed_bps,
     }
 
 def make_progress_callback(upload_id):
+    started_at = time.monotonic()
     def progress(sent, total):
         if total:
             # Reserve 0-10 for local transfer and 95-100 for DB cleanup.
             percent = 10 + int((sent / total) * 85)
-            set_upload_progress(upload_id, percent, "Uploading to Telegram")
+            elapsed = max(time.monotonic() - started_at, 0.1)
+            set_upload_progress(upload_id, percent, "Uploading to Telegram", bytes_done=sent, bytes_total=total, speed_bps=sent / elapsed)
     return progress
+
+def empty_upload_progress():
+    return {
+        "percent": 0,
+        "stage": "Waiting",
+        "done": False,
+        "error": None,
+        "bytes_done": None,
+        "bytes_total": None,
+        "speed_bps": None,
+    }
+
+async def save_upload_to_temp(file, temp_path, upload_id):
+    total = int(file.headers.get("content-length") or 0) or None
+    received = 0
+    started_at = time.monotonic()
+    async with aiofiles.open(temp_path, "wb") as f:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            await f.write(chunk)
+            received += len(chunk)
+            if total:
+                percent = min(9, int((received / total) * 10))
+            else:
+                percent = 5
+            elapsed = max(time.monotonic() - started_at, 0.1)
+            set_upload_progress(upload_id, percent, "Receiving file", bytes_done=received, bytes_total=total, speed_bps=received / elapsed)
+    return received
 
 # ─── Auth ──────────────────────────────────────────────────────────
 
@@ -372,7 +408,7 @@ async def list_files(folder_id: Optional[str] = None, user: dict = Depends(get_u
 
 @app.get("/api/upload-progress/{upload_id}")
 async def get_upload_progress(upload_id: str, user: dict = Depends(get_user)):
-    return UPLOAD_PROGRESS.get(upload_id, {"percent": 0, "stage": "Waiting", "done": False, "error": None})
+    return UPLOAD_PROGRESS.get(upload_id, empty_upload_progress())
 
 @app.post("/api/files/upload")
 async def upload_file(
@@ -381,23 +417,18 @@ async def upload_file(
     upload_id: Optional[str] = Form(None),
     user: dict = Depends(get_user)
 ):
-    set_upload_progress(upload_id, 5, "Receiving file")
+    set_upload_progress(upload_id, 0, "Receiving file")
     temp_path = os.path.join(TEMP_DIR, f"{uuid.uuid4()}_{file.filename}")
 
-    # Save uploaded file to temp
-    content = await file.read()
-    async with aiofiles.open(temp_path, 'wb') as f:
-        await f.write(content)
-
-    size = len(content)
-    set_upload_progress(upload_id, 10, "Connecting to Telegram")
+    size = await save_upload_to_temp(file, temp_path, upload_id)
+    set_upload_progress(upload_id, 10, "Connecting to Telegram", bytes_done=size, bytes_total=size)
     client = await telegram_service.get_client(user["session_name"], user["api_id"], user["api_hash"], **user_proxy_args(user))
 
     try:
         msg_id = await telegram_service.upload_file(client, temp_path, caption=file.filename, progress_callback=make_progress_callback(upload_id))
-        set_upload_progress(upload_id, 96, "Saving file")
+        set_upload_progress(upload_id, 96, "Saving file", bytes_done=size, bytes_total=size)
         file_id = await db.create_file(msg_id, file.filename, size, file.content_type, folder_id)
-        set_upload_progress(upload_id, 100, "Done", done=True)
+        set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -508,7 +539,7 @@ async def portal_create_share_link(file_id: str, user: dict = Depends(get_portal
 
 @app.get("/api/portal/upload-progress/{upload_id}")
 async def get_portal_upload_progress(upload_id: str, user: dict = Depends(get_portal_user)):
-    return UPLOAD_PROGRESS.get(upload_id, {"percent": 0, "stage": "Waiting", "done": False, "error": None})
+    return UPLOAD_PROGRESS.get(upload_id, empty_upload_progress())
 
 @app.post("/api/portal/files/upload")
 async def portal_upload_file(
@@ -520,24 +551,22 @@ async def portal_upload_file(
     if not user["can_upload"]:
         raise HTTPException(status_code=403, detail="Upload permission is disabled for this account")
 
-    set_upload_progress(upload_id, 5, "Receiving file")
+    set_upload_progress(upload_id, 0, "Receiving file")
     temp_path = os.path.join(TEMP_DIR, f"{uuid.uuid4()}_{file.filename}")
-    content = await file.read()
-    async with aiofiles.open(temp_path, 'wb') as f:
-        await f.write(content)
+    size = await save_upload_to_temp(file, temp_path, upload_id)
 
     try:
-        set_upload_progress(upload_id, 10, "Connecting to Telegram")
+        set_upload_progress(upload_id, 10, "Connecting to Telegram", bytes_done=size, bytes_total=size)
         client = await get_storage_client()
         msg_id = await telegram_service.upload_file(client, temp_path, caption=file.filename, progress_callback=make_progress_callback(upload_id))
-        set_upload_progress(upload_id, 96, "Saving file")
-        file_id = await db.create_file(msg_id, file.filename, len(content), file.content_type, folder_id)
-        set_upload_progress(upload_id, 100, "Done", done=True)
+        set_upload_progress(upload_id, 96, "Saving file", bytes_done=size, bytes_total=size)
+        file_id = await db.create_file(msg_id, file.filename, size, file.content_type, folder_id)
+        set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
-    return {"id": file_id, "name": file.filename, "size": len(content)}
+    return {"id": file_id, "name": file.filename, "size": size}
 
 @app.get("/api/portal/files/{file_id}/download")
 async def portal_download_file(file_id: str, background_tasks: BackgroundTasks, user: dict = Depends(get_portal_user)):

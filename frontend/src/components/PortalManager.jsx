@@ -16,6 +16,7 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadTasks, setUploadTasks] = useState([]);
   const [driveName, setDriveName] = useState('My Drive');
 
   const refresh = useCallback(async () => {
@@ -76,36 +77,74 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const handleUpload = async (e) => {
     e.preventDefault();
     if (!uploadFileObj) return;
-    setUploading(true);
-    setUploadProgress(0);
-    setUploadStage('Preparing');
+    const fileToUpload = uploadFileObj;
     const uploadId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    const folderId = currentFolderId;
+    setUploadTasks(prev => [...prev, {
+      id: uploadId,
+      name: fileToUpload.name,
+      size: fileToUpload.size,
+      percent: 0,
+      stage: 'Preparing',
+      bytesDone: 0,
+      speed: 0,
+      status: 'uploading',
+    }]);
+    setUploadFileObj(null);
+    setShowUpload(false);
+    startBackgroundUpload(uploadId, fileToUpload, folderId);
+  };
+
+  const updateUploadTask = (id, patch) => {
+    setUploadTasks(prev => prev.map(task => task.id === id ? { ...task, ...patch } : task));
+  };
+
+  const startBackgroundUpload = async (uploadId, fileToUpload, folderId) => {
+    const formData = new FormData();
+    formData.append('file', fileToUpload);
+    formData.append('upload_id', uploadId);
+    if (folderId) formData.append('folder_id', folderId);
+
     let poller = null;
+    let lastLoaded = 0;
+    let lastTime = performance.now();
     try {
-      const formData = new FormData();
-      formData.append('file', uploadFileObj);
-      formData.append('upload_id', uploadId);
-      if (currentFolderId) formData.append('folder_id', currentFolderId);
       poller = setInterval(async () => {
         try {
           const res = await portalGetUploadProgress(uploadId);
-          setUploadProgress(res.data.percent);
-          setUploadStage(res.data.stage);
+          updateUploadTask(uploadId, {
+            percent: res.data.percent,
+            stage: res.data.stage,
+            bytesDone: res.data.bytes_done ?? undefined,
+            size: res.data.bytes_total || fileToUpload.size,
+            speed: res.data.speed_bps ?? 0,
+          });
         } catch (err) {}
-      }, 700);
+      }, 800);
+
       await portalUploadFile(formData, (progressEvent) => {
-        const percent = Math.round((progressEvent.loaded * 10) / progressEvent.total);
-        setUploadProgress(prev => Math.max(prev, percent));
-        setUploadStage('Sending to server');
+        const now = performance.now();
+        const elapsed = Math.max((now - lastTime) / 1000, 0.1);
+        const delta = progressEvent.loaded - lastLoaded;
+        lastLoaded = progressEvent.loaded;
+        lastTime = now;
+        updateUploadTask(uploadId, {
+          percent: Math.min(10, Math.round((progressEvent.loaded / progressEvent.total) * 10)),
+          stage: 'Sending to server',
+          bytesDone: progressEvent.loaded,
+          size: progressEvent.total || fileToUpload.size,
+          speed: delta / elapsed,
+        });
       });
-      setUploadProgress(100);
-      setUploadStage('Done');
-      setUploadFileObj(null);
-      setShowUpload(false);
+      updateUploadTask(uploadId, { percent: 100, stage: 'Done', bytesDone: fileToUpload.size, speed: 0, status: 'done' });
       refresh();
+      setTimeout(() => {
+        setUploadTasks(prev => prev.filter(task => task.id !== uploadId));
+      }, 5000);
+    } catch (err) {
+      updateUploadTask(uploadId, { stage: err.response?.data?.detail || 'Upload failed', status: 'error', speed: 0 });
     } finally {
       if (poller) clearInterval(poller);
-      setUploading(false);
     }
   };
 
@@ -126,6 +165,11 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+  };
+
+  const formatSpeed = (bytesPerSecond) => {
+    if (!bytesPerSecond) return '0 B/s';
+    return `${formatSize(bytesPerSecond)}/s`;
   };
 
   return (
@@ -242,6 +286,40 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
                 {uploading ? 'Uploading...' : 'Upload'}
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {uploadTasks.length > 0 && (
+        <div className="fixed bottom-5 right-5 z-40 w-[min(420px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl">
+          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">Uploads</p>
+              <p className="text-xs text-gray-500">{uploadTasks.filter(task => task.status === 'uploading').length} active</p>
+            </div>
+            <button onClick={() => setUploadTasks(prev => prev.filter(task => task.status === 'uploading'))} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700" title="Clear completed uploads">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="max-h-72 overflow-y-auto">
+            {uploadTasks.map(task => (
+              <div key={task.id} className="border-b border-gray-100 px-4 py-3 last:border-b-0">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-gray-800">{task.name}</p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {task.stage} · {formatSize(task.bytesDone || 0)} / {formatSize(task.size || 0)} · {formatSpeed(task.speed)}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 text-xs font-semibold ${task.status === 'error' ? 'text-red-500' : 'text-blue-600'}`}>
+                    {task.status === 'error' ? 'Failed' : `${task.percent || 0}%`}
+                  </span>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
+                  <div className={`h-full rounded-full transition-all ${task.status === 'error' ? 'bg-red-500' : 'bg-blue-600'}`} style={{ width: `${Math.max(2, task.percent || 0)}%` }} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

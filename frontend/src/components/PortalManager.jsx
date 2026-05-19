@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { portalCreateFolder, portalCreateShareLink, portalDownloadFileUrl, portalGetFiles, portalGetFolders, portalGetSettings, portalGetUploadProgress, portalMe, portalUploadFile, portalUploadFileChunk, publicShareUrl } from '../api';
-import { ChevronRight, Download, Eye, File as FileIcon, Folder, Home, Link, Loader, LogOut, Moon, Plus, Sun, Upload, X } from 'lucide-react';
+import { portalChangePassword, portalCreateFolder, portalCreateShareLink, portalDownloadFileUrl, portalGetFiles, portalGetFolders, portalGetSettings, portalGetStorageSummary, portalGetUploadProgress, portalMe, portalUploadFile, portalUploadFileChunk, publicShareUrl } from '../api';
+import { ChevronRight, Download, Eye, File as FileIcon, Folder, HardDrive, Home, KeyRound, Link, Loader, LogOut, Moon, Plus, Sun, Upload, User, X } from 'lucide-react';
 
 const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [currentFolderId, setCurrentFolderId] = useState(null);
@@ -22,6 +22,18 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [previewText, setPreviewText] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [showProfile, setShowProfile] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [profileMessage, setProfileMessage] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [storageSummary, setStorageSummary] = useState({
+    drive_name: 'My Drive',
+    drive_size: 0,
+    current_name: 'My Drive',
+    current_size: 0,
+    folder_sizes: {},
+  });
 
   const CHUNK_SIZE = 25 * 1024 * 1024;
   const CHUNKED_UPLOAD_THRESHOLD = 50 * 1024 * 1024;
@@ -35,6 +47,9 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
       ]);
       setFolders(foldersRes.data);
       setFiles(filesRes.data);
+      const summaryRes = await portalGetStorageSummary(currentFolderId);
+      setStorageSummary(summaryRes.data);
+      setDriveName(summaryRes.data.drive_name);
     } finally {
       setLoading(false);
     }
@@ -230,6 +245,23 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
     }
   };
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setProfileError('');
+    setProfileMessage('');
+    try {
+      const formData = new FormData();
+      formData.append('current_password', currentPassword);
+      formData.append('new_password', newPassword);
+      await portalChangePassword(formData);
+      setCurrentPassword('');
+      setNewPassword('');
+      setProfileMessage('Password updated');
+    } catch (err) {
+      setProfileError(err.response?.data?.detail || err.message);
+    }
+  };
+
   const fileExtension = (name = '') => name.split('.').pop()?.toLowerCase() || '';
   const isPdfFile = (file) => file.mime_type === 'application/pdf' || fileExtension(file.name) === 'pdf';
   const isTextFile = (file) => {
@@ -279,6 +311,10 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
     return 'Uploading';
   };
 
+  const folderSize = (folderId) => storageSummary.folder_sizes?.[folderId] || 0;
+  const storagePanelName = currentFolderId ? storageSummary.current_name : driveName;
+  const storagePanelSize = storageSummary.current_size || 0;
+
   return (
     <div className="flex h-screen bg-gray-50">
       <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
@@ -289,6 +325,9 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
               <span className="font-bold text-gray-800">{driveName}</span>
             </div>
             <div className="flex items-center gap-1">
+              <button onClick={() => setShowProfile(true)} className="p-1 text-gray-500 hover:text-blue-600" title="Profile">
+                <User className="w-4 h-4" />
+              </button>
               <button onClick={onToggleTheme} className="p-1 text-gray-500 hover:text-blue-600" title="Toggle theme">
                 {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
@@ -306,6 +345,15 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
           <Home className="w-4 h-4 mr-2" />
           <span className="text-sm font-medium">{driveName}</span>
         </button>
+        <div className="mt-auto border-t border-gray-200 p-4">
+          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <HardDrive className="h-4 w-4 text-blue-600" /> {storagePanelName}
+          </div>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-full rounded-full bg-blue-600" style={{ width: storagePanelSize ? '32%' : '8%' }} />
+          </div>
+          <p className="mt-2 text-xs text-gray-500">{formatSize(storagePanelSize)} / ∞</p>
+        </div>
       </aside>
 
       <main className="flex-1 flex flex-col">
@@ -342,6 +390,7 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
                 <div key={folder.id} className="group relative bg-white p-4 rounded-xl border border-gray-200 hover:shadow-md transition cursor-pointer" onClick={() => enterFolder(folder)}>
                   <Folder className="w-10 h-10 text-yellow-500 mb-2" />
                   <p className="text-sm font-medium text-gray-800 truncate">{folder.name}</p>
+                  <p className="text-xs text-gray-500 mt-1">{formatSize(folderSize(folder.id))}</p>
                 </div>
               ))}
               {files.map(file => (
@@ -361,6 +410,7 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
                   </div>
                   <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
                   <p className="text-xs text-gray-500 mt-1">{formatSize(file.size)}</p>
+                  <p className="text-xs text-gray-500 mt-1 truncate">Uploaded by {file.uploaded_by || 'Owner'}</p>
                 </div>
               ))}
               {folders.length === 0 && files.length === 0 && (
@@ -476,6 +526,49 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showProfile && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Profile</h3>
+              <button onClick={() => setShowProfile(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="rounded-xl border border-gray-200 p-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <User className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate font-semibold text-gray-900">{profile?.username}</p>
+                  <p className="text-xs text-gray-500">{profile?.can_upload ? 'Can upload files' : 'Download only'}</p>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleChangePassword} className="mt-5 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <KeyRound className="h-4 w-4 text-blue-600" /> Change password
+              </div>
+              {profileError && <div className="rounded-lg bg-red-100 p-3 text-sm text-red-700">{profileError}</div>}
+              {profileMessage && <div className="rounded-lg bg-green-100 p-3 text-sm text-green-700">{profileMessage}</div>}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Current password</label>
+                <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">New password</label>
+                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+              </div>
+              <button type="submit" className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700">Update password</button>
+            </form>
+
+            <button onClick={onLogout} className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+              <LogOut className="h-4 w-4" /> Logout
+            </button>
           </div>
         </div>
       )}

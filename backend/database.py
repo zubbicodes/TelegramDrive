@@ -53,9 +53,11 @@ async def init_db():
                 size INTEGER,
                 mime_type TEXT,
                 folder_id TEXT,
+                uploaded_by TEXT,
                 created_at TEXT
             )
         """)
+        await _ensure_column(db, "files", "uploaded_by", "TEXT")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS portal_users (
                 id TEXT PRIMARY KEY,
@@ -250,13 +252,13 @@ async def get_folder_by_id(folder_id):
             row = await cursor.fetchone()
             return dict(row) if row else None
 
-async def create_file(telegram_message_id, name, size, mime_type, folder_id=None):
+async def create_file(telegram_message_id, name, size, mime_type, folder_id=None, uploaded_by="Owner"):
     file_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "INSERT INTO files (id, telegram_message_id, name, size, mime_type, folder_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (file_id, telegram_message_id, name, size, mime_type, folder_id, created_at)
+            "INSERT INTO files (id, telegram_message_id, name, size, mime_type, folder_id, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (file_id, telegram_message_id, name, size, mime_type, folder_id, uploaded_by, created_at)
         )
         await db.commit()
     return file_id
@@ -385,6 +387,11 @@ async def update_portal_user(user_id, username, can_upload, password_hash=None):
             )
         await db.commit()
 
+async def update_portal_password(user_id, password_hash):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE portal_users SET password_hash = ? WHERE id = ?", (password_hash, user_id))
+        await db.commit()
+
 async def create_portal_session(user_id):
     token = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
@@ -401,7 +408,7 @@ async def get_portal_user_by_token(token):
         db.row_factory = aiosqlite.Row
         async with db.execute(
             """
-            SELECT pu.id, pu.username, pu.can_upload, pu.created_at
+            SELECT pu.id, pu.username, pu.password_hash, pu.can_upload, pu.created_at
             FROM portal_sessions ps
             JOIN portal_users pu ON pu.id = ps.user_id
             WHERE ps.token = ?

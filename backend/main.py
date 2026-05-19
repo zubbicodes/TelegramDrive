@@ -204,12 +204,12 @@ async def append_upload_chunk(chunk, temp_path):
             written += len(data)
     return written
 
-async def finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client):
+async def finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client, uploaded_by="Owner"):
     try:
         set_upload_progress(upload_id, 10, "Connecting to Telegram", bytes_done=size, bytes_total=size)
         msg_id = await telegram_service.upload_file(client, temp_path, caption=filename, progress_callback=make_progress_callback(upload_id))
         set_upload_progress(upload_id, 96, "Saving file", bytes_done=size, bytes_total=size)
-        file_id = await db.create_file(msg_id, filename, size, mime_type, folder_id)
+        file_id = await db.create_file(msg_id, filename, size, mime_type, folder_id, uploaded_by)
         set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
         return file_id
     except Exception as exc:
@@ -221,11 +221,11 @@ async def finish_upload_from_temp(upload_id, temp_path, filename, size, mime_typ
 
 async def finish_owner_chunked_upload(upload_id, temp_path, filename, size, mime_type, folder_id, user):
     client = await telegram_service.get_client(user["session_name"], user["api_id"], user["api_hash"], **user_proxy_args(user))
-    await finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client)
+    await finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client, "Owner")
 
-async def finish_portal_chunked_upload(upload_id, temp_path, filename, size, mime_type, folder_id):
+async def finish_portal_chunked_upload(upload_id, temp_path, filename, size, mime_type, folder_id, uploaded_by):
     client = await get_storage_client()
-    await finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client)
+    await finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client, uploaded_by)
 
 # ─── Auth ──────────────────────────────────────────────────────────
 
@@ -379,6 +379,19 @@ async def portal_login(username: str = Form(...), password: str = Form(...)):
 async def portal_me(user: dict = Depends(get_portal_user)):
     return {"username": user["username"], "can_upload": bool(user["can_upload"])}
 
+@app.post("/api/portal/password")
+async def portal_change_password(
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    user: dict = Depends(get_portal_user)
+):
+    if not verify_password(current_password, user["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="New password must be at least 6 characters")
+    await db.update_portal_password(user["id"], hash_password(new_password))
+    return {"status": "updated"}
+
 @app.get("/api/portal/settings")
 async def portal_settings(user: dict = Depends(get_portal_user)):
     return {"drive_name": await db.get_setting("drive_name", "My Drive")}
@@ -465,7 +478,7 @@ async def upload_file(
     try:
         msg_id = await telegram_service.upload_file(client, temp_path, caption=file.filename, progress_callback=make_progress_callback(upload_id))
         set_upload_progress(upload_id, 96, "Saving file", bytes_done=size, bytes_total=size)
-        file_id = await db.create_file(msg_id, file.filename, size, file.content_type, folder_id)
+        file_id = await db.create_file(msg_id, file.filename, size, file.content_type, folder_id, "Owner")
         set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
     finally:
         if os.path.exists(temp_path):
@@ -632,7 +645,7 @@ async def portal_upload_file(
         client = await get_storage_client()
         msg_id = await telegram_service.upload_file(client, temp_path, caption=file.filename, progress_callback=make_progress_callback(upload_id))
         set_upload_progress(upload_id, 96, "Saving file", bytes_done=size, bytes_total=size)
-        file_id = await db.create_file(msg_id, file.filename, size, file.content_type, folder_id)
+        file_id = await db.create_file(msg_id, file.filename, size, file.content_type, folder_id, user["username"])
         set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
     finally:
         if os.path.exists(temp_path):
@@ -671,7 +684,7 @@ async def portal_upload_file_chunk(
         if bytes_done != total_size:
             raise HTTPException(status_code=400, detail="Uploaded size does not match expected size")
         set_upload_progress(upload_id, 10, "Queued for Telegram", bytes_done=bytes_done, bytes_total=total_size, speed_bps=0)
-        background_tasks.add_task(finish_portal_chunked_upload, upload_id, temp_path, filename, total_size, mime_type, folder_id)
+        background_tasks.add_task(finish_portal_chunked_upload, upload_id, temp_path, filename, total_size, mime_type, folder_id, user["username"])
         return {"status": "processing", "upload_id": upload_id}
 
     return {"status": "chunk_received", "upload_id": upload_id, "bytes_done": bytes_done}

@@ -599,7 +599,10 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
                 <div key={`${item.kind}-${item.id}`} onClick={() => item.kind === 'folder' ? enterFolder(item) : canPreviewFile(item) ? openPreviewFile(item) : window.open(downloadFileUrl(item.id), '_blank')} className="grid cursor-pointer grid-cols-[1fr_110px_120px] items-center border-b border-gray-50 px-4 py-3 last:border-0 hover:bg-blue-50/60">
                   <div className="flex min-w-0 items-center gap-3">
                     {item.kind === 'folder' ? <Folder className="h-5 w-5 shrink-0 text-amber-500" /> : <FileIcon className="h-5 w-5 shrink-0 text-blue-500" />}
-                    <span className="truncate text-sm font-medium text-gray-800">{item.name}</span>
+                    <div className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-gray-800">{item.name}</span>
+                      {item.kind === 'file' && <span className="block truncate text-xs text-gray-500">Uploaded by {item.uploaded_by || 'Owner'}</span>}
+                    </div>
                   </div>
                   <span className="text-sm text-gray-500">{item.kind === 'folder' ? formatSize(folderSize(item.id)) : formatSize(item.size)}</span>
                   <div className="flex justify-end gap-1">
@@ -649,6 +652,7 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
                   </div>
                   <p className="text-sm font-medium text-gray-800 truncate">{file.name}</p>
                   <p className="text-xs text-gray-500 mt-1">{formatSize(file.size)}</p>
+                  <p className="text-xs text-gray-500 mt-1 truncate">Uploaded by {file.uploaded_by || 'Owner'}</p>
                 </div>
               ))}
               {visibleFolders.length === 0 && visibleFiles.length === 0 && (

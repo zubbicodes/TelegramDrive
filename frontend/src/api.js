@@ -30,6 +30,7 @@ export const getStorageSummary = (folderId) => api.get('/api/storage/summary', {
 
 export const portalLogin = (data) => api.post('/api/portal/login', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const portalMe = () => api.get('/api/portal/me');
+export const portalChangePassword = (data) => api.post('/api/portal/password', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const portalGetSettings = () => api.get('/api/portal/settings');
 export const portalGetStorageSummary = (folderId) => api.get('/api/portal/storage/summary', { params: { folder_id: folderId } });
 export const getPortalUsers = () => api.get('/api/portal/users');

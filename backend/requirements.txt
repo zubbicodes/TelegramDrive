@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+telethon
+python-multipart
+aiosqlite
+python-jose[cryptography]
+aiofiles
+PySocks

@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+backend/telegram_drive.db
+backend/sessions/
+backend/temp/
+backend/venv/
+backend/server.log
+backend/server.err
+frontend/node_modules/
+frontend/dist/
+frontend/server.log
+frontend/server.err

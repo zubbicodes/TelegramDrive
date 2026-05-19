@@ -61,9 +61,10 @@ class TelegramService:
             return client
 
         kwargs = {
-            "timeout": 10,
-            "connection_retries": 1,
-            "request_retries": 1,
+            "timeout": 120,
+            "connection_retries": 5,
+            "request_retries": 5,
+            "auto_reconnect": True,
         }
         if proxy_config:
             kwargs.update(proxy_config)

@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import secrets
 import time
+import logging
 from fastapi import FastAPI, File, UploadFile, Form, Header, HTTPException, Depends, Query, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -14,6 +15,9 @@ import asyncio
 
 import database as db
 from telegram_service import telegram_service
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Telegram Drive")
 
@@ -213,6 +217,7 @@ async def finish_upload_from_temp(upload_id, temp_path, filename, size, mime_typ
         set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
         return file_id
     except Exception as exc:
+        logger.error(f"Upload failed for {filename} (upload_id={upload_id}): {exc}", exc_info=True)
         set_upload_progress(upload_id, UPLOAD_PROGRESS.get(upload_id, {}).get("percent", 0), "Upload failed", done=True, error=str(exc), bytes_done=size, bytes_total=size, speed_bps=0)
         raise
     finally:
@@ -480,6 +485,9 @@ async def upload_file(
         set_upload_progress(upload_id, 96, "Saving file", bytes_done=size, bytes_total=size)
         file_id = await db.create_file(msg_id, file.filename, size, file.content_type, folder_id, "Owner")
         set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
+    except Exception as exc:
+        logger.error(f"Direct upload failed for {file.filename} (upload_id={upload_id}): {exc}", exc_info=True)
+        raise
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -647,6 +655,9 @@ async def portal_upload_file(
         set_upload_progress(upload_id, 96, "Saving file", bytes_done=size, bytes_total=size)
         file_id = await db.create_file(msg_id, file.filename, size, file.content_type, folder_id, user["username"])
         set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
+    except Exception as exc:
+        logger.error(f"Portal direct upload failed for {file.filename} (upload_id={upload_id}): {exc}", exc_info=True)
+        raise
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)

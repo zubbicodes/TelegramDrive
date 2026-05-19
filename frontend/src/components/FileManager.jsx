@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortalUser, getPortalUsers, getFolders, getAllFolders, getFiles, deleteFolder, deleteFile, createFolder, uploadFile, uploadFileChunk, downloadFileUrl, deletePortalUser, updatePortalUser, getUploadProgress, createShareLink, publicShareUrl, moveFile, getSettings, updateSettings, getStorageSummary } from '../api';
-import { Folder, File as FileIcon, Trash2, Upload, Plus, ChevronRight, Home, Loader, X, Users, Link, MoveRight, Pencil, Search, Grid3X3, List, HardDrive, LogOut, Cloud, Moon, Sun, Eye, Download } from 'lucide-react';
+import { Folder, File as FileIcon, Trash2, Upload, Plus, ChevronRight, Home, Loader, X, Users, Link, MoveRight, Pencil, Search, Grid3X3, List, HardDrive, LogOut, Cloud, Moon, Sun, Eye, EyeOff, Download } from 'lucide-react';
 
 const FolderTree = ({ parentId = null, level = 0, selectedId, onSelect }) => {
   const [folders, setFolders] = useState([]);
@@ -68,11 +68,13 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
   const [portalUsers, setPortalUsers] = useState([]);
   const [portalUsername, setPortalUsername] = useState('');
   const [portalPassword, setPortalPassword] = useState('');
+  const [showPortalPassword, setShowPortalPassword] = useState(false);
   const [portalCanUpload, setPortalCanUpload] = useState(false);
   const [portalError, setPortalError] = useState('');
   const [editingPortalUser, setEditingPortalUser] = useState(null);
   const [editPortalUsername, setEditPortalUsername] = useState('');
   const [editPortalPassword, setEditPortalPassword] = useState('');
+  const [showEditPortalPassword, setShowEditPortalPassword] = useState(false);
   const [editPortalCanUpload, setEditPortalCanUpload] = useState(false);
   const [showMoveFile, setShowMoveFile] = useState(false);
   const [movingFile, setMovingFile] = useState(null);
@@ -822,7 +824,12 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Password</label>
-                <input type="password" value={portalPassword} onChange={e => setPortalPassword(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                <div className="relative mt-1">
+                  <input type={showPortalPassword ? 'text' : 'password'} value={portalPassword} onChange={e => setPortalPassword(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                  <button type="button" onClick={() => setShowPortalPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                    {showPortalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Create</button>
               <label className="md:col-span-3 flex items-center gap-2 text-sm text-gray-700">
@@ -838,7 +845,12 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">New Password</label>
-                  <input type="password" value={editPortalPassword} onChange={e => setEditPortalPassword(e.target.value)} placeholder="Leave blank to keep" className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <div className="relative mt-1">
+                    <input type={showEditPortalPassword ? 'text' : 'password'} value={editPortalPassword} onChange={e => setEditPortalPassword(e.target.value)} placeholder="Leave blank to keep" className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button type="button" onClick={() => setShowEditPortalPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                      {showEditPortalPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Save</button>

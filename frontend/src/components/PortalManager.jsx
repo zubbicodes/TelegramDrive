@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { portalChangePassword, portalCreateFolder, portalCreateShareLink, portalDownloadFileUrl, portalGetFiles, portalGetFolders, portalGetSettings, portalGetStorageSummary, portalGetUploadProgress, portalMe, portalUploadFile, portalUploadFileChunk, publicShareUrl } from '../api';
-import { ChevronRight, Download, Eye, File as FileIcon, Folder, HardDrive, Home, KeyRound, Link, Loader, LogOut, Moon, Plus, Sun, Upload, User, X } from 'lucide-react';
+import { ChevronRight, Download, Eye, EyeOff, File as FileIcon, Folder, HardDrive, Home, KeyRound, Link, Loader, LogOut, Moon, Plus, Sun, Upload, User, X } from 'lucide-react';
 
 const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [currentFolderId, setCurrentFolderId] = useState(null);
@@ -24,7 +24,9 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [previewError, setPreviewError] = useState('');
   const [showProfile, setShowProfile] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
   const [profileError, setProfileError] = useState('');
   const [storageSummary, setStorageSummary] = useState({
@@ -557,11 +559,21 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
               {profileMessage && <div className="rounded-lg bg-green-100 p-3 text-sm text-green-700">{profileMessage}</div>}
               <div>
                 <label className="block text-sm font-medium text-gray-700">Current password</label>
-                <input type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                <div className="relative mt-1">
+                  <input type={showCurrentPassword ? 'text' : 'password'} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                  <button type="button" onClick={() => setShowCurrentPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                    {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">New password</label>
-                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                <div className="relative mt-1">
+                  <input type={showNewPassword ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                  <button type="button" onClick={() => setShowNewPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <button type="submit" className="w-full rounded-lg bg-blue-600 py-2 text-sm font-semibold text-white hover:bg-blue-700">Update password</button>
             </form>

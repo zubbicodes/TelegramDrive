@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { authStart, authCode, authPassword, portalLogin } from '../api';
-import { Loader, Cloud, ShieldCheck, Zap, Moon, Sun } from 'lucide-react';
+import { Loader, Cloud, ShieldCheck, Zap, Moon, Sun, Eye, EyeOff } from 'lucide-react';
 
 const AuthScreen = ({ onLogin, theme, onToggleTheme }) => {
   const [mode, setMode] = useState('owner');
@@ -19,6 +19,10 @@ const AuthScreen = ({ onLogin, theme, onToggleTheme }) => {
   const [password, setPassword] = useState('');
   const [friendUsername, setFriendUsername] = useState('');
   const [friendPassword, setFriendPassword] = useState('');
+  const [showFriendPassword, setShowFriendPassword] = useState(false);
+  const [showProxySecret, setShowProxySecret] = useState(false);
+  const [showProxyPassword, setShowProxyPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -149,7 +153,12 @@ const AuthScreen = ({ onLogin, theme, onToggleTheme }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Password</label>
-              <input type="password" value={friendPassword} onChange={e => setFriendPassword(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+              <div className="relative mt-1">
+                <input type={showFriendPassword ? 'text' : 'password'} value={friendPassword} onChange={e => setFriendPassword(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                <button type="button" onClick={() => setShowFriendPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                  {showFriendPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
               {loading ? <Loader className="w-5 h-5 animate-spin" /> : 'Login'}
@@ -196,7 +205,12 @@ const AuthScreen = ({ onLogin, theme, onToggleTheme }) => {
                 {proxyType === 'mtproto' ? (
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Proxy Secret</label>
-                    <input type="password" value={proxySecret} onChange={e => setProxySecret(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required={useProxy && proxyType === 'mtproto'} />
+                    <div className="relative mt-1">
+                      <input type={showProxySecret ? 'text' : 'password'} value={proxySecret} onChange={e => setProxySecret(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" required={useProxy && proxyType === 'mtproto'} />
+                      <button type="button" onClick={() => setShowProxySecret(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                        {showProxySecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -206,7 +220,12 @@ const AuthScreen = ({ onLogin, theme, onToggleTheme }) => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Password</label>
-                      <input type="password" value={proxyPassword} onChange={e => setProxyPassword(e.target.value)} placeholder="Optional" className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <div className="relative mt-1">
+                        <input type={showProxyPassword ? 'text' : 'password'} value={proxyPassword} onChange={e => setProxyPassword(e.target.value)} placeholder="Optional" className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <button type="button" onClick={() => setShowProxyPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                          {showProxyPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -234,7 +253,12 @@ const AuthScreen = ({ onLogin, theme, onToggleTheme }) => {
           <form onSubmit={handlePassword} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">2FA Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+              <div className="relative mt-1">
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                <button type="button" onClick={() => setShowPassword(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
               {loading ? <Loader className="w-5 h-5 animate-spin" /> : 'Login'}

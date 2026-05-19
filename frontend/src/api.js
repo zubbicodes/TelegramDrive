@@ -47,6 +47,10 @@ export const uploadFile = (data, onProgress) => api.post('/api/files/upload', da
   headers: { 'Content-Type': 'multipart/form-data' },
   onUploadProgress: onProgress,
 });
+export const uploadFileChunk = (data, onProgress) => api.post('/api/files/upload-chunk', data, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+  onUploadProgress: onProgress,
+});
 export const getUploadProgress = (uploadId) => api.get(`/api/upload-progress/${uploadId}`);
 export const deleteFile = (id) => api.delete(`/api/files/${id}`);
 export const moveFile = (id, data) => api.put(`/api/files/${id}/move`, data, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -59,6 +63,10 @@ export const portalCreateFolder = (data) => api.post('/api/portal/folders', data
 export const portalGetFiles = (folderId) => api.get('/api/portal/files', { params: { folder_id: folderId } });
 export const portalCreateShareLink = (id) => api.post(`/api/portal/files/${id}/share`);
 export const portalUploadFile = (data, onProgress) => api.post('/api/portal/files/upload', data, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+  onUploadProgress: onProgress,
+});
+export const portalUploadFileChunk = (data, onProgress) => api.post('/api/portal/files/upload-chunk', data, {
   headers: { 'Content-Type': 'multipart/form-data' },
   onUploadProgress: onProgress,
 });

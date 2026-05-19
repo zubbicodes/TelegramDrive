@@ -28,6 +28,7 @@ app.add_middleware(
 TEMP_DIR = os.getenv("TELEGRAM_DRIVE_TEMP_DIR", os.path.join(os.path.dirname(__file__), "temp"))
 os.makedirs(TEMP_DIR, exist_ok=True)
 UPLOAD_PROGRESS = {}
+UPLOAD_CHUNK_BYTES = 25 * 1024 * 1024
 
 FRONTEND_DIST = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "dist"))
 
@@ -188,6 +189,43 @@ async def save_upload_to_temp(file, temp_path, upload_id):
             elapsed = max(time.monotonic() - started_at, 0.1)
             set_upload_progress(upload_id, percent, "Receiving file", bytes_done=received, bytes_total=total, speed_bps=received / elapsed)
     return received
+
+def chunk_upload_path(upload_id):
+    return os.path.join(TEMP_DIR, f"chunked_{upload_id}.part")
+
+async def append_upload_chunk(chunk, temp_path):
+    written = 0
+    async with aiofiles.open(temp_path, "ab") as f:
+        while True:
+            data = await chunk.read(1024 * 1024)
+            if not data:
+                break
+            await f.write(data)
+            written += len(data)
+    return written
+
+async def finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client):
+    try:
+        set_upload_progress(upload_id, 10, "Connecting to Telegram", bytes_done=size, bytes_total=size)
+        msg_id = await telegram_service.upload_file(client, temp_path, caption=filename, progress_callback=make_progress_callback(upload_id))
+        set_upload_progress(upload_id, 96, "Saving file", bytes_done=size, bytes_total=size)
+        file_id = await db.create_file(msg_id, filename, size, mime_type, folder_id)
+        set_upload_progress(upload_id, 100, "Done", done=True, bytes_done=size, bytes_total=size, speed_bps=0)
+        return file_id
+    except Exception as exc:
+        set_upload_progress(upload_id, UPLOAD_PROGRESS.get(upload_id, {}).get("percent", 0), "Upload failed", done=True, error=str(exc), bytes_done=size, bytes_total=size, speed_bps=0)
+        raise
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
+async def finish_owner_chunked_upload(upload_id, temp_path, filename, size, mime_type, folder_id, user):
+    client = await telegram_service.get_client(user["session_name"], user["api_id"], user["api_hash"], **user_proxy_args(user))
+    await finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client)
+
+async def finish_portal_chunked_upload(upload_id, temp_path, filename, size, mime_type, folder_id):
+    client = await get_storage_client()
+    await finish_upload_from_temp(upload_id, temp_path, filename, size, mime_type, folder_id, client)
 
 # ─── Auth ──────────────────────────────────────────────────────────
 
@@ -435,6 +473,40 @@ async def upload_file(
 
     return {"id": file_id, "name": file.filename, "size": size}
 
+@app.post("/api/files/upload-chunk")
+async def upload_file_chunk(
+    background_tasks: BackgroundTasks,
+    chunk: UploadFile = File(...),
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    filename: str = Form(...),
+    total_size: int = Form(...),
+    mime_type: Optional[str] = Form(None),
+    folder_id: Optional[str] = Form(None),
+    user: dict = Depends(get_user)
+):
+    if total_chunks < 1 or chunk_index < 0 or chunk_index >= total_chunks:
+        raise HTTPException(status_code=400, detail="Invalid chunk index")
+
+    temp_path = chunk_upload_path(upload_id)
+    if chunk_index == 0 and os.path.exists(temp_path):
+        os.remove(temp_path)
+
+    await append_upload_chunk(chunk, temp_path)
+    bytes_done = os.path.getsize(temp_path)
+    percent = min(10, int((bytes_done / total_size) * 10)) if total_size else 0
+    set_upload_progress(upload_id, percent, "Receiving file", bytes_done=bytes_done, bytes_total=total_size, speed_bps=None)
+
+    if chunk_index == total_chunks - 1:
+        if bytes_done != total_size:
+            raise HTTPException(status_code=400, detail="Uploaded size does not match expected size")
+        set_upload_progress(upload_id, 10, "Queued for Telegram", bytes_done=bytes_done, bytes_total=total_size, speed_bps=0)
+        background_tasks.add_task(finish_owner_chunked_upload, upload_id, temp_path, filename, total_size, mime_type, folder_id, user)
+        return {"status": "processing", "upload_id": upload_id}
+
+    return {"status": "chunk_received", "upload_id": upload_id, "bytes_done": bytes_done}
+
 @app.get("/api/files/{file_id}/download")
 async def download_file(file_id: str, background_tasks: BackgroundTasks, user: dict = Depends(get_user)):
     file_row = await db.get_file(file_id)
@@ -567,6 +639,42 @@ async def portal_upload_file(
             os.remove(temp_path)
 
     return {"id": file_id, "name": file.filename, "size": size}
+
+@app.post("/api/portal/files/upload-chunk")
+async def portal_upload_file_chunk(
+    background_tasks: BackgroundTasks,
+    chunk: UploadFile = File(...),
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    total_chunks: int = Form(...),
+    filename: str = Form(...),
+    total_size: int = Form(...),
+    mime_type: Optional[str] = Form(None),
+    folder_id: Optional[str] = Form(None),
+    user: dict = Depends(get_portal_user)
+):
+    if not user["can_upload"]:
+        raise HTTPException(status_code=403, detail="Upload permission is disabled for this account")
+    if total_chunks < 1 or chunk_index < 0 or chunk_index >= total_chunks:
+        raise HTTPException(status_code=400, detail="Invalid chunk index")
+
+    temp_path = chunk_upload_path(upload_id)
+    if chunk_index == 0 and os.path.exists(temp_path):
+        os.remove(temp_path)
+
+    await append_upload_chunk(chunk, temp_path)
+    bytes_done = os.path.getsize(temp_path)
+    percent = min(10, int((bytes_done / total_size) * 10)) if total_size else 0
+    set_upload_progress(upload_id, percent, "Receiving file", bytes_done=bytes_done, bytes_total=total_size, speed_bps=None)
+
+    if chunk_index == total_chunks - 1:
+        if bytes_done != total_size:
+            raise HTTPException(status_code=400, detail="Uploaded size does not match expected size")
+        set_upload_progress(upload_id, 10, "Queued for Telegram", bytes_done=bytes_done, bytes_total=total_size, speed_bps=0)
+        background_tasks.add_task(finish_portal_chunked_upload, upload_id, temp_path, filename, total_size, mime_type, folder_id)
+        return {"status": "processing", "upload_id": upload_id}
+
+    return {"status": "chunk_received", "upload_id": upload_id, "bytes_done": bytes_done}
 
 @app.get("/api/portal/files/{file_id}/download")
 async def portal_download_file(file_id: str, background_tasks: BackgroundTasks, user: dict = Depends(get_portal_user)):

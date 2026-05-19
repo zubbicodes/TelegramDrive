@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { portalCreateFolder, portalCreateShareLink, portalDownloadFileUrl, portalGetFiles, portalGetFolders, portalGetSettings, portalGetUploadProgress, portalMe, portalUploadFile, publicShareUrl } from '../api';
+import { portalCreateFolder, portalCreateShareLink, portalDownloadFileUrl, portalGetFiles, portalGetFolders, portalGetSettings, portalGetUploadProgress, portalMe, portalUploadFile, portalUploadFileChunk, publicShareUrl } from '../api';
 import { ChevronRight, Download, Eye, File as FileIcon, Folder, Home, Link, Loader, LogOut, Moon, Plus, Sun, Upload, X } from 'lucide-react';
 
 const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
@@ -22,6 +22,9 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [previewText, setPreviewText] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+
+  const CHUNK_SIZE = 25 * 1024 * 1024;
+  const CHUNKED_UPLOAD_THRESHOLD = 50 * 1024 * 1024;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -137,20 +140,25 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
         } catch (err) {}
       }, 800);
 
-      await portalUploadFile(formData, (progressEvent) => {
-        const now = performance.now();
-        const elapsed = Math.max((now - lastTime) / 1000, 0.1);
-        const delta = progressEvent.loaded - lastLoaded;
-        lastLoaded = progressEvent.loaded;
-        lastTime = now;
-        updateUploadTask(uploadId, {
-          percent: Math.min(10, Math.round((progressEvent.loaded / progressEvent.total) * 10)),
-          stage: 'Sending to server',
-          bytesDone: progressEvent.loaded,
-          size: progressEvent.total || fileToUpload.size,
-          speed: delta / elapsed,
+      if (fileToUpload.size > CHUNKED_UPLOAD_THRESHOLD) {
+        await uploadFileInChunks(uploadId, fileToUpload, folderId);
+      } else {
+        await portalUploadFile(formData, (progressEvent) => {
+          const now = performance.now();
+          const elapsed = Math.max((now - lastTime) / 1000, 0.1);
+          const delta = progressEvent.loaded - lastLoaded;
+          lastLoaded = progressEvent.loaded;
+          lastTime = now;
+          updateUploadTask(uploadId, {
+            percent: Math.min(10, Math.round((progressEvent.loaded / progressEvent.total) * 10)),
+            stage: 'Sending to server',
+            bytesDone: progressEvent.loaded,
+            size: progressEvent.total || fileToUpload.size,
+            speed: delta / elapsed,
+          });
         });
-      });
+      }
+      await waitForUploadCompletion(uploadId, fileToUpload.size);
       updateUploadTask(uploadId, { percent: 100, stage: 'Done', bytesDone: fileToUpload.size, speed: 0, status: 'done' });
       refresh();
       setTimeout(() => {
@@ -160,6 +168,54 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
       updateUploadTask(uploadId, { stage: err.response?.data?.detail || 'Upload failed', status: 'error', speed: 0 });
     } finally {
       if (poller) clearInterval(poller);
+    }
+  };
+
+  const uploadFileInChunks = async (uploadId, fileToUpload, folderId) => {
+    const totalChunks = Math.ceil(fileToUpload.size / CHUNK_SIZE);
+    let uploadedBytes = 0;
+    let lastLoaded = 0;
+    let lastTime = performance.now();
+    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex += 1) {
+      const start = chunkIndex * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, fileToUpload.size);
+      const chunk = fileToUpload.slice(start, end);
+      const formData = new FormData();
+      formData.append('chunk', chunk, fileToUpload.name);
+      formData.append('upload_id', uploadId);
+      formData.append('chunk_index', chunkIndex);
+      formData.append('total_chunks', totalChunks);
+      formData.append('filename', fileToUpload.name);
+      formData.append('total_size', fileToUpload.size);
+      formData.append('mime_type', fileToUpload.type || 'application/octet-stream');
+      if (folderId) formData.append('folder_id', folderId);
+
+      await portalUploadFileChunk(formData, (progressEvent) => {
+        const now = performance.now();
+        const elapsed = Math.max((now - lastTime) / 1000, 0.1);
+        const currentLoaded = uploadedBytes + progressEvent.loaded;
+        const delta = currentLoaded - lastLoaded;
+        lastLoaded = currentLoaded;
+        lastTime = now;
+        updateUploadTask(uploadId, {
+          percent: Math.min(10, Math.round((currentLoaded / fileToUpload.size) * 10)),
+          stage: `Sending chunk ${chunkIndex + 1} of ${totalChunks}`,
+          bytesDone: currentLoaded,
+          size: fileToUpload.size,
+          speed: delta / elapsed,
+        });
+      });
+      uploadedBytes = end;
+    }
+  };
+
+  const waitForUploadCompletion = async (uploadId, fallbackSize) => {
+    while (true) {
+      const res = await portalGetUploadProgress(uploadId);
+      applyServerUploadProgress(uploadId, res.data, fallbackSize);
+      if (res.data.error) throw new Error(res.data.error);
+      if (res.data.done) return;
+      await new Promise(resolve => setTimeout(resolve, 1200));
     }
   };
 

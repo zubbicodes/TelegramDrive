@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TEMP_DIR = os.path.join(os.path.dirname(__file__), "temp")
+TEMP_DIR = os.getenv("TELEGRAM_DRIVE_TEMP_DIR", os.path.join(os.path.dirname(__file__), "temp"))
 os.makedirs(TEMP_DIR, exist_ok=True)
 UPLOAD_PROGRESS = {}
 

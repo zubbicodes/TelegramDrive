@@ -3,7 +3,8 @@ import os
 import uuid
 from datetime import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "telegram_drive.db")
+DB_PATH = os.getenv("TELEGRAM_DRIVE_DB_PATH", os.path.join(os.path.dirname(__file__), "telegram_drive.db"))
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:

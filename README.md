@@ -42,10 +42,10 @@ The Vite dev server calls the backend at `http://<hostname>:8000`. In production
 1. Create a new Coolify application from this GitHub repository.
 2. Choose Dockerfile build.
 3. Expose port `8000`.
-4. Add persistent volumes for:
-   - `/app/backend/sessions`
-   - `/app/backend/telegram_drive.db`
-   - `/app/backend/temp` if you want temp files outside the container filesystem
+4. Persist the backend volume paths:
+   - `/app/data`
+   - `/app/sessions`
+   - `/app/temp`
 5. Deploy.
 
 The image builds the React frontend, copies it into the runtime image, and starts:
@@ -66,5 +66,5 @@ The chosen proxy settings are stored for that owner session and reused for uploa
 ## Important Notes
 
 - Session files in `backend/sessions/` contain Telegram authentication keys. Do not commit or share them.
-- `backend/telegram_drive.db` stores local folder/file metadata and portal accounts. Keep it on a persistent volume in production.
+- `/app/data/telegram_drive.db` stores local folder/file metadata and portal accounts in Docker. Keep `/app/data` on a persistent volume in production.
 - Telegram limits still apply to upload size, download speed, and request rate.

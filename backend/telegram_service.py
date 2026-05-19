@@ -4,7 +4,7 @@ from telethon import TelegramClient
 from telethon.errors import SessionPasswordNeededError
 from telethon.network.connection.tcpmtproxy import ConnectionTcpMTProxyRandomizedIntermediate
 
-SESSIONS_DIR = os.path.join(os.path.dirname(__file__), "sessions")
+SESSIONS_DIR = os.getenv("TELEGRAM_DRIVE_SESSIONS_DIR", os.path.join(os.path.dirname(__file__), "sessions"))
 os.makedirs(SESSIONS_DIR, exist_ok=True)
 
 class TelegramService:

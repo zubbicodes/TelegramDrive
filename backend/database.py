@@ -271,6 +271,13 @@ async def get_files(folder_id=None):
                 rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
+async def get_all_files():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT * FROM files") as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
 async def get_file(file_id):
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row

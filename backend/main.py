@@ -78,6 +78,52 @@ async def get_storage_client():
     client = await telegram_service.get_client(owner["session_name"], owner["api_id"], owner["api_hash"], **user_proxy_args(owner))
     return client
 
+async def get_storage_summary(folder_id=None):
+    drive_name = await db.get_setting("drive_name", "My Drive")
+    folders = await db.get_all_folders()
+    files = await db.get_all_files()
+    children_by_parent = {}
+    folder_names = {}
+    for folder in folders:
+        children_by_parent.setdefault(folder["parent_id"], []).append(folder["id"])
+        folder_names[folder["id"]] = folder["name"]
+
+    direct_sizes = {}
+    for file in files:
+        direct_sizes[file["folder_id"]] = direct_sizes.get(file["folder_id"], 0) + (file["size"] or 0)
+
+    folder_sizes = {}
+
+    def folder_total(current_id):
+        if current_id in folder_sizes:
+            return folder_sizes[current_id]
+        total = direct_sizes.get(current_id, 0)
+        for child_id in children_by_parent.get(current_id, []):
+            total += folder_total(child_id)
+        folder_sizes[current_id] = total
+        return total
+
+    drive_size = direct_sizes.get(None, 0)
+    for root_folder_id in children_by_parent.get(None, []):
+        drive_size += folder_total(root_folder_id)
+
+    current_size = drive_size
+    current_name = drive_name
+    if folder_id:
+        if folder_id not in folder_names:
+            raise HTTPException(status_code=404, detail="Folder not found")
+        current_size = folder_total(folder_id)
+        current_name = folder_names[folder_id]
+
+    return {
+        "drive_name": drive_name,
+        "drive_size": drive_size,
+        "current_folder_id": folder_id,
+        "current_name": current_name,
+        "current_size": current_size,
+        "folder_sizes": folder_sizes,
+    }
+
 def user_proxy_args(user):
     proxy_type = user.get("proxy_type") or ("mtproto" if user.get("mtproxy_host") else "none")
     return {
@@ -193,6 +239,10 @@ async def update_settings(drive_name: str = Form(...), user: dict = Depends(get_
     await db.set_setting("drive_name", drive_name)
     return {"drive_name": drive_name}
 
+@app.get("/api/storage/summary")
+async def storage_summary(folder_id: Optional[str] = None, user: dict = Depends(get_user)):
+    return await get_storage_summary(folder_id)
+
 # Portal users are local username/password accounts for friends. They use the
 # owner's connected Telegram account as storage and never need Telegram API keys.
 
@@ -258,6 +308,10 @@ async def portal_me(user: dict = Depends(get_portal_user)):
 @app.get("/api/portal/settings")
 async def portal_settings(user: dict = Depends(get_portal_user)):
     return {"drive_name": await db.get_setting("drive_name", "My Drive")}
+
+@app.get("/api/portal/storage/summary")
+async def portal_storage_summary(folder_id: Optional[str] = None, user: dict = Depends(get_portal_user)):
+    return await get_storage_summary(folder_id)
 
 # ─── Folders ───────────────────────────────────────────────────────
 

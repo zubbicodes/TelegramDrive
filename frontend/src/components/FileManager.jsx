@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { createPortalUser, getPortalUsers, getFolders, getAllFolders, getFiles, deleteFolder, deleteFile, createFolder, uploadFile, downloadFileUrl, deletePortalUser, updatePortalUser, getUploadProgress, createShareLink, publicShareUrl, moveFile, getSettings, updateSettings } from '../api';
+import { createPortalUser, getPortalUsers, getFolders, getAllFolders, getFiles, deleteFolder, deleteFile, createFolder, uploadFile, downloadFileUrl, deletePortalUser, updatePortalUser, getUploadProgress, createShareLink, publicShareUrl, moveFile, getSettings, updateSettings, getStorageSummary } from '../api';
 import { Folder, File as FileIcon, Trash2, Upload, Plus, ChevronRight, Home, Loader, X, Users, Link, MoveRight, Pencil, Search, Grid3X3, List, HardDrive, LogOut, Cloud, Moon, Sun } from 'lucide-react';
 
 const FolderTree = ({ parentId = null, level = 0, selectedId, onSelect }) => {
@@ -83,6 +83,13 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
   const [driveNameDraft, setDriveNameDraft] = useState('My Drive');
   const [showDriveSettings, setShowDriveSettings] = useState(false);
   const [settingsError, setSettingsError] = useState('');
+  const [storageSummary, setStorageSummary] = useState({
+    drive_name: 'My Drive',
+    drive_size: 0,
+    current_name: 'My Drive',
+    current_size: 0,
+    folder_sizes: {},
+  });
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -93,6 +100,10 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
       ]);
       setFolders(fRes.data);
       setFiles(flRes.data);
+      const summaryRes = await getStorageSummary(currentFolderId);
+      setStorageSummary(summaryRes.data);
+      setDriveName(summaryRes.data.drive_name);
+      setDriveNameDraft(summaryRes.data.drive_name);
     } catch (e) {
       console.error(e);
     }
@@ -312,10 +323,13 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const folderSize = (folderId) => storageSummary.folder_sizes?.[folderId] || 0;
+
   const visibleFolders = folders.filter(folder => folder.name.toLowerCase().includes(query.toLowerCase()));
   const visibleFiles = files.filter(file => file.name.toLowerCase().includes(query.toLowerCase()));
-  const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
-  const currentLocation = path.length ? path[path.length - 1].name : driveName;
+  const storagePanelName = currentFolderId ? storageSummary.current_name : driveName;
+  const storagePanelSize = storageSummary.current_size || 0;
+  const currentLocation = currentFolderId ? storageSummary.current_name : driveName;
 
   return (
     <div className="flex h-screen bg-[#f8fafc] text-gray-900">
@@ -362,12 +376,12 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
         </div>
         <div className="border-t border-gray-200 p-4">
           <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <HardDrive className="h-4 w-4 text-blue-600" /> Folder storage
+            <HardDrive className="h-4 w-4 text-blue-600" /> {storagePanelName}
           </div>
           <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-100">
-            <div className="h-full rounded-full bg-blue-600" style={{ width: files.length ? '42%' : '8%' }} />
+            <div className="h-full rounded-full bg-blue-600" style={{ width: storagePanelSize ? '32%' : '8%' }} />
           </div>
-          <p className="mt-2 text-xs text-gray-500">{formatSize(totalSize)} in this folder</p>
+          <p className="mt-2 text-xs text-gray-500">{formatSize(storagePanelSize)} / ∞</p>
         </div>
       </aside>
 
@@ -438,7 +452,7 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
                     {item.kind === 'folder' ? <Folder className="h-5 w-5 shrink-0 text-amber-500" /> : <FileIcon className="h-5 w-5 shrink-0 text-blue-500" />}
                     <span className="truncate text-sm font-medium text-gray-800">{item.name}</span>
                   </div>
-                  <span className="text-sm text-gray-500">{item.kind === 'folder' ? '-' : formatSize(item.size)}</span>
+                  <span className="text-sm text-gray-500">{item.kind === 'folder' ? formatSize(folderSize(item.id)) : formatSize(item.size)}</span>
                   <div className="flex justify-end gap-1">
                     {item.kind === 'file' && <button onClick={(e) => { e.stopPropagation(); handleShareFile(item.id); }} className="rounded-lg p-2 text-blue-600 hover:bg-blue-100" title="Copy share link"><Link className="h-4 w-4" /></button>}
                     {item.kind === 'file' && <button onClick={(e) => { e.stopPropagation(); openMoveFile(item); }} className="rounded-lg p-2 text-gray-600 hover:bg-gray-100" title="Move"><MoveRight className="h-4 w-4" /></button>}
@@ -459,6 +473,7 @@ const FileManager = ({ onLogout, theme, onToggleTheme }) => {
                     </button>
                   </div>
                   <p className="text-sm font-medium text-gray-800 truncate">{folder.name}</p>
+                  <p className="text-xs text-gray-500 mt-1">{formatSize(folderSize(folder.id))}</p>
                 </div>
               ))}
               {visibleFiles.map(file => (

@@ -26,10 +26,12 @@ export const authPassword = (data) => api.post('/api/auth/password', data, { hea
 export const authMe = () => api.get('/api/auth/me');
 export const getSettings = () => api.get('/api/settings');
 export const updateSettings = (data) => api.put('/api/settings', data, { headers: { 'Content-Type': 'multipart/form-data' } });
+export const getStorageSummary = (folderId) => api.get('/api/storage/summary', { params: { folder_id: folderId } });
 
 export const portalLogin = (data) => api.post('/api/portal/login', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const portalMe = () => api.get('/api/portal/me');
 export const portalGetSettings = () => api.get('/api/portal/settings');
+export const portalGetStorageSummary = (folderId) => api.get('/api/portal/storage/summary', { params: { folder_id: folderId } });
 export const getPortalUsers = () => api.get('/api/portal/users');
 export const createPortalUser = (data) => api.post('/api/portal/users', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const updatePortalUser = (id, data) => api.put(`/api/portal/users/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } });

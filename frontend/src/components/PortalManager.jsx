@@ -99,6 +99,23 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
     setUploadTasks(prev => prev.map(task => task.id === id ? { ...task, ...patch } : task));
   };
 
+  const applyServerUploadProgress = (uploadId, progress, fallbackSize) => {
+    setUploadTasks(prev => prev.map(task => {
+      if (task.id !== uploadId) return task;
+      if (progress.stage === 'Waiting' && (task.bytesDone > 0 || task.stage !== 'Preparing')) {
+        return task;
+      }
+      return {
+        ...task,
+        percent: Math.max(task.percent || 0, progress.percent || 0),
+        stage: progress.stage || task.stage,
+        bytesDone: progress.bytes_done ?? task.bytesDone,
+        size: progress.bytes_total || task.size || fallbackSize,
+        speed: progress.speed_bps ?? task.speed,
+      };
+    }));
+  };
+
   const startBackgroundUpload = async (uploadId, fileToUpload, folderId) => {
     const formData = new FormData();
     formData.append('file', fileToUpload);
@@ -112,13 +129,7 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
       poller = setInterval(async () => {
         try {
           const res = await portalGetUploadProgress(uploadId);
-          updateUploadTask(uploadId, {
-            percent: res.data.percent,
-            stage: res.data.stage,
-            bytesDone: res.data.bytes_done ?? undefined,
-            size: res.data.bytes_total || fileToUpload.size,
-            speed: res.data.speed_bps ?? 0,
-          });
+          applyServerUploadProgress(uploadId, res.data, fileToUpload.size);
         } catch (err) {}
       }, 800);
 
@@ -170,6 +181,13 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const formatSpeed = (bytesPerSecond) => {
     if (!bytesPerSecond) return '0 B/s';
     return `${formatSize(bytesPerSecond)}/s`;
+  };
+
+  const uploadStatusLabel = (task) => {
+    if (task.status === 'error') return 'Failed';
+    if (task.status === 'done') return 'Completed';
+    if (task.stage === 'Uploading to Telegram') return 'Uploading to Telegram';
+    return 'Uploading';
   };
 
   return (
@@ -307,9 +325,8 @@ const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-gray-800">{task.name}</p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      {task.stage} · {formatSize(task.bytesDone || 0)} / {formatSize(task.size || 0)} · {formatSpeed(task.speed)}
-                    </p>
+                    <p className="mt-1 text-xs font-medium text-gray-600">{uploadStatusLabel(task)}</p>
+                    <p className="mt-0.5 text-xs text-gray-500">{task.stage} · {formatSize(task.bytesDone || 0)} / {formatSize(task.size || 0)} · {formatSpeed(task.speed)}</p>
                   </div>
                   <span className={`shrink-0 text-xs font-semibold ${task.status === 'error' ? 'text-red-500' : 'text-blue-600'}`}>
                     {task.status === 'error' ? 'Failed' : `${task.percent || 0}%`}

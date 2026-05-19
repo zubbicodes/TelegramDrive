@@ -78,6 +78,12 @@ async def init_db():
                 created_at TEXT
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
         await db.commit()
 
 async def _ensure_column(db, table, column, column_type):
@@ -396,3 +402,21 @@ async def get_portal_user_by_token(token):
         ) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+async def get_setting(key, default=None):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT value FROM app_settings WHERE key = ?", (key,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else default
+
+async def set_setting(key, value):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """
+            INSERT INTO app_settings (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            (key, value)
+        )
+        await db.commit()

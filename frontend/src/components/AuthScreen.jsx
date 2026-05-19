@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { authStart, authCode, authPassword, portalLogin } from '../api';
-import { Loader, Cloud, ShieldCheck, Zap } from 'lucide-react';
+import { Loader, Cloud, ShieldCheck, Zap, Moon, Sun } from 'lucide-react';
 
-const AuthScreen = ({ onLogin }) => {
+const AuthScreen = ({ onLogin, theme, onToggleTheme }) => {
   const [mode, setMode] = useState('owner');
   const [step, setStep] = useState(1);
   const [phone, setPhone] = useState('');
@@ -118,6 +118,9 @@ const AuthScreen = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] px-4">
+      <button onClick={onToggleTheme} className="fixed right-4 top-4 rounded-xl border border-gray-200 bg-white p-2 text-gray-600 shadow-sm hover:bg-gray-50" title="Toggle theme">
+        {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+      </button>
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
         <div className="flex items-center justify-center mb-6">
           <div className="mr-3 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-600 text-white">

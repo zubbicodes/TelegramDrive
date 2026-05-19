@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { portalCreateFolder, portalCreateShareLink, portalDownloadFileUrl, portalGetFiles, portalGetFolders, portalGetUploadProgress, portalMe, portalUploadFile, publicShareUrl } from '../api';
-import { ChevronRight, File as FileIcon, Folder, Home, Link, Loader, LogOut, Plus, Upload, X } from 'lucide-react';
+import { portalCreateFolder, portalCreateShareLink, portalDownloadFileUrl, portalGetFiles, portalGetFolders, portalGetSettings, portalGetUploadProgress, portalMe, portalUploadFile, publicShareUrl } from '../api';
+import { ChevronRight, File as FileIcon, Folder, Home, Link, Loader, LogOut, Moon, Plus, Sun, Upload, X } from 'lucide-react';
 
-const PortalManager = ({ onLogout }) => {
+const PortalManager = ({ onLogout, theme, onToggleTheme }) => {
   const [currentFolderId, setCurrentFolderId] = useState(null);
   const [path, setPath] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -16,6 +16,7 @@ const PortalManager = ({ onLogout }) => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [driveName, setDriveName] = useState('My Drive');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -32,7 +33,12 @@ const PortalManager = ({ onLogout }) => {
   }, [currentFolderId]);
 
   useEffect(() => {
-    portalMe().then(res => setProfile(res.data)).catch(onLogout);
+    Promise.all([portalMe(), portalGetSettings()])
+      .then(([profileRes, settingsRes]) => {
+        setProfile(profileRes.data);
+        setDriveName(settingsRes.data.drive_name);
+      })
+      .catch(onLogout);
   }, []);
 
   useEffect(() => {
@@ -129,11 +135,16 @@ const PortalManager = ({ onLogout }) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <Folder className="w-6 h-6 text-blue-600 mr-2" />
-              <span className="font-bold text-gray-800">Shared Drive</span>
+              <span className="font-bold text-gray-800">{driveName}</span>
             </div>
-            <button onClick={onLogout} className="p-1 text-gray-500 hover:text-red-600" title="Logout">
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button onClick={onToggleTheme} className="p-1 text-gray-500 hover:text-blue-600" title="Toggle theme">
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+              <button onClick={onLogout} className="p-1 text-gray-500 hover:text-red-600" title="Logout">
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           {profile && <p className="mt-2 text-xs text-gray-500 truncate">{profile.username}</p>}
         </div>
@@ -142,14 +153,14 @@ const PortalManager = ({ onLogout }) => {
           className={`m-2 flex items-center py-2 px-2 rounded-lg text-left transition ${currentFolderId === null ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
         >
           <Home className="w-4 h-4 mr-2" />
-          <span className="text-sm font-medium">My Drive</span>
+          <span className="text-sm font-medium">{driveName}</span>
         </button>
       </aside>
 
       <main className="flex-1 flex flex-col">
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
           <div className="flex items-center text-sm text-gray-600">
-            <span onClick={() => goToBreadcrumb(-1)} className="cursor-pointer hover:text-blue-600 font-medium">My Drive</span>
+            <span onClick={() => goToBreadcrumb(-1)} className="cursor-pointer hover:text-blue-600 font-medium">{driveName}</span>
             {path.map((p, i) => (
               <React.Fragment key={p.id}>
                 <ChevronRight className="w-4 h-4 mx-1 text-gray-400" />

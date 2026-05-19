@@ -24,9 +24,12 @@ export const authStart = (data) => api.post('/api/auth/start', data, { headers: 
 export const authCode = (data) => api.post('/api/auth/code', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const authPassword = (data) => api.post('/api/auth/password', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const authMe = () => api.get('/api/auth/me');
+export const getSettings = () => api.get('/api/settings');
+export const updateSettings = (data) => api.put('/api/settings', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 
 export const portalLogin = (data) => api.post('/api/portal/login', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const portalMe = () => api.get('/api/portal/me');
+export const portalGetSettings = () => api.get('/api/portal/settings');
 export const getPortalUsers = () => api.get('/api/portal/users');
 export const createPortalUser = (data) => api.post('/api/portal/users', data, { headers: { 'Content-Type': 'multipart/form-data' } });
 export const updatePortalUser = (id, data) => api.put(`/api/portal/users/${id}`, data, { headers: { 'Content-Type': 'multipart/form-data' } });

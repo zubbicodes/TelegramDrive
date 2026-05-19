@@ -8,6 +8,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('td_token'));
   const [portalToken, setPortalToken] = useState(localStorage.getItem('td_portal_token'));
   const [checking, setChecking] = useState(true);
+  const [theme, setTheme] = useState(localStorage.getItem('td_theme') || 'light');
 
   useEffect(() => {
     const verify = async () => {
@@ -33,6 +34,15 @@ function App() {
     };
     verify();
   }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('td_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   const handleLogin = (t, mode = 'owner') => {
     if (mode === 'portal') {
@@ -62,7 +72,13 @@ function App() {
 
   return (
     <div className="h-screen w-screen">
-      {token ? <FileManager onLogout={handleLogout} /> : portalToken ? <PortalManager onLogout={handleLogout} /> : <AuthScreen onLogin={handleLogin} />}
+      {token ? (
+        <FileManager onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
+      ) : portalToken ? (
+        <PortalManager onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
+      ) : (
+        <AuthScreen onLogin={handleLogin} theme={theme} onToggleTheme={toggleTheme} />
+      )}
     </div>
   );
 }

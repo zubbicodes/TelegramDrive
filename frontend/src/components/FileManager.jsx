@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { createPortalUser, getPortalUsers, getFolders, getAllFolders, getFiles, deleteFolder, deleteFile, createFolder, uploadFile, downloadFileUrl, deletePortalUser, updatePortalUser, getUploadProgress, createShareLink, publicShareUrl, moveFile } from '../api';
-import { Folder, File as FileIcon, Trash2, Upload, Plus, ChevronRight, Home, Loader, X, Users, Link, MoveRight, Pencil, Search, Grid3X3, List, HardDrive, LogOut, Cloud } from 'lucide-react';
+import { createPortalUser, getPortalUsers, getFolders, getAllFolders, getFiles, deleteFolder, deleteFile, createFolder, uploadFile, downloadFileUrl, deletePortalUser, updatePortalUser, getUploadProgress, createShareLink, publicShareUrl, moveFile, getSettings, updateSettings } from '../api';
+import { Folder, File as FileIcon, Trash2, Upload, Plus, ChevronRight, Home, Loader, X, Users, Link, MoveRight, Pencil, Search, Grid3X3, List, HardDrive, LogOut, Cloud, Moon, Sun } from 'lucide-react';
 
 const FolderTree = ({ parentId = null, level = 0, selectedId, onSelect }) => {
   const [folders, setFolders] = useState([]);
@@ -50,7 +50,7 @@ const FolderTree = ({ parentId = null, level = 0, selectedId, onSelect }) => {
   );
 };
 
-const FileManager = ({ onLogout }) => {
+const FileManager = ({ onLogout, theme, onToggleTheme }) => {
   const [currentFolderId, setCurrentFolderId] = useState(null);
   const [path, setPath] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -79,6 +79,10 @@ const FileManager = ({ onLogout }) => {
   const [allFolders, setAllFolders] = useState([]);
   const [query, setQuery] = useState('');
   const [viewMode, setViewMode] = useState('grid');
+  const [driveName, setDriveName] = useState('My Drive');
+  const [driveNameDraft, setDriveNameDraft] = useState('My Drive');
+  const [showDriveSettings, setShowDriveSettings] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -98,6 +102,13 @@ const FileManager = ({ onLogout }) => {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    getSettings().then(res => {
+      setDriveName(res.data.drive_name);
+      setDriveNameDraft(res.data.drive_name);
+    }).catch(() => {});
+  }, []);
 
   const enterFolder = (folder) => {
     setCurrentFolderId(folder.id);
@@ -272,6 +283,27 @@ const FileManager = ({ onLogout }) => {
     }
   };
 
+  const openDriveSettings = () => {
+    setSettingsError('');
+    setDriveNameDraft(driveName);
+    setShowDriveSettings(true);
+  };
+
+  const handleRenameDrive = async (e) => {
+    e.preventDefault();
+    setSettingsError('');
+    try {
+      const formData = new FormData();
+      formData.append('drive_name', driveNameDraft);
+      const res = await updateSettings(formData);
+      setDriveName(res.data.drive_name);
+      setDriveNameDraft(res.data.drive_name);
+      setShowDriveSettings(false);
+    } catch (err) {
+      setSettingsError(err.response?.data?.detail || err.message);
+    }
+  };
+
   const formatSize = (bytes) => {
     if (!bytes) return '0 B';
     const k = 1024;
@@ -283,7 +315,7 @@ const FileManager = ({ onLogout }) => {
   const visibleFolders = folders.filter(folder => folder.name.toLowerCase().includes(query.toLowerCase()));
   const visibleFiles = files.filter(file => file.name.toLowerCase().includes(query.toLowerCase()));
   const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
-  const currentLocation = path.length ? path[path.length - 1].name : 'My Drive';
+  const currentLocation = path.length ? path[path.length - 1].name : driveName;
 
   return (
     <div className="flex h-screen bg-[#f8fafc] text-gray-900">
@@ -299,9 +331,14 @@ const FileManager = ({ onLogout }) => {
               <span className="text-xs text-gray-500">Owner workspace</span>
             </div>
           </div>
-          <button onClick={onLogout} className="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-600" title="Logout">
-            <LogOut className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button onClick={onToggleTheme} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100" title="Toggle theme">
+              {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </button>
+            <button onClick={onLogout} className="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-600" title="Logout">
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
         <div className="flex-1 overflow-y-auto p-3">
           <button onClick={() => setShowUpload(true)} className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700">
@@ -312,7 +349,7 @@ const FileManager = ({ onLogout }) => {
             className={`flex items-center py-2 px-3 cursor-pointer rounded-lg transition ${currentFolderId === null ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-100'}`}
           >
             <Home className="w-4 h-4 mr-2" />
-            <span className="text-sm font-medium">My Drive</span>
+            <span className="text-sm font-medium">{driveName}</span>
           </div>
           <div className="mt-2">
             <FolderTree selectedId={currentFolderId} onSelect={(id, name) => {
@@ -341,7 +378,7 @@ const FileManager = ({ onLogout }) => {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex items-center text-sm text-gray-600">
-                <span onClick={() => goToBreadcrumb(-1)} className="cursor-pointer hover:text-blue-600 font-medium">My Drive</span>
+                <span onClick={() => goToBreadcrumb(-1)} className="cursor-pointer hover:text-blue-600 font-medium">{driveName}</span>
                 {path.map((p, i) => (
                   <React.Fragment key={p.id}>
                     <ChevronRight className="w-4 h-4 mx-1 text-gray-400" />
@@ -349,7 +386,14 @@ const FileManager = ({ onLogout }) => {
                   </React.Fragment>
                 ))}
               </div>
-              <h1 className="mt-1 text-2xl font-semibold tracking-normal text-gray-900">{currentLocation}</h1>
+              <div className="mt-1 flex items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-normal text-gray-900">{currentLocation}</h1>
+                {!path.length && (
+                  <button onClick={openDriveSettings} className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-blue-600" title="Rename drive">
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
@@ -509,7 +553,7 @@ const FileManager = ({ onLogout }) => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">Destination</label>
                 <select value={moveFolderId} onChange={e => setMoveFolderId(e.target.value)} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  <option value="">My Drive</option>
+                  <option value="">{driveName}</option>
                   {allFolders.map(folder => (
                     <option key={folder.id} value={folder.id}>{folder.name}</option>
                   ))}
@@ -588,6 +632,23 @@ const FileManager = ({ onLogout }) => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showDriveSettings && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold">Rename Drive</h3>
+              <button onClick={() => setShowDriveSettings(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            {settingsError && <div className="mb-4 rounded-lg bg-red-100 p-3 text-sm text-red-700">{settingsError}</div>}
+            <form onSubmit={handleRenameDrive}>
+              <label className="block text-sm font-medium text-gray-700">Drive name</label>
+              <input type="text" value={driveNameDraft} onChange={e => setDriveNameDraft(e.target.value)} maxLength={40} className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" autoFocus />
+              <button type="submit" className="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition">Save</button>
+            </form>
           </div>
         </div>
       )}

@@ -179,6 +179,20 @@ async def auth_password(token: str = Form(...), password: str = Form(...)):
 async def auth_me(user: dict = Depends(get_user)):
     return {"phone": user["phone"], "authorized": True}
 
+@app.get("/api/settings")
+async def get_settings(user: dict = Depends(get_user)):
+    return {"drive_name": await db.get_setting("drive_name", "My Drive")}
+
+@app.put("/api/settings")
+async def update_settings(drive_name: str = Form(...), user: dict = Depends(get_user)):
+    drive_name = drive_name.strip()
+    if len(drive_name) < 1:
+        raise HTTPException(status_code=400, detail="Drive name is required")
+    if len(drive_name) > 40:
+        raise HTTPException(status_code=400, detail="Drive name must be 40 characters or fewer")
+    await db.set_setting("drive_name", drive_name)
+    return {"drive_name": drive_name}
+
 # Portal users are local username/password accounts for friends. They use the
 # owner's connected Telegram account as storage and never need Telegram API keys.
 
@@ -240,6 +254,10 @@ async def portal_login(username: str = Form(...), password: str = Form(...)):
 @app.get("/api/portal/me")
 async def portal_me(user: dict = Depends(get_portal_user)):
     return {"username": user["username"], "can_upload": bool(user["can_upload"])}
+
+@app.get("/api/portal/settings")
+async def portal_settings(user: dict = Depends(get_portal_user)):
+    return {"drive_name": await db.get_setting("drive_name", "My Drive")}
 
 # ─── Folders ───────────────────────────────────────────────────────
 

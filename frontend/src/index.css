@@ -5,3 +5,71 @@
 body {
   @apply bg-gray-50 text-gray-900;
 }
+
+.dark body {
+  @apply bg-gray-950 text-gray-100;
+}
+
+.dark .bg-\[\#f8fafc\],
+.dark .bg-gray-50,
+.dark .bg-gray-100 {
+  background-color: #0f172a !important;
+}
+
+.dark .bg-white {
+  background-color: #111827 !important;
+}
+
+.dark .bg-gray-200 {
+  background-color: #374151 !important;
+}
+
+.dark .border-gray-50,
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: #374151 !important;
+}
+
+.dark .text-gray-900,
+.dark .text-gray-800,
+.dark .text-gray-700 {
+  color: #f3f4f6 !important;
+}
+
+.dark .text-gray-600,
+.dark .text-gray-500,
+.dark .text-gray-400 {
+  color: #9ca3af !important;
+}
+
+.dark input,
+.dark select {
+  background-color: #0f172a !important;
+  border-color: #374151 !important;
+  color: #f9fafb !important;
+}
+
+.dark input::placeholder {
+  color: #6b7280 !important;
+}
+
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-gray-100:hover {
+  background-color: #1f2937 !important;
+}
+
+.dark .hover\:bg-blue-50:hover,
+.dark .bg-blue-50 {
+  background-color: rgba(37, 99, 235, 0.16) !important;
+}
+
+.dark .bg-blue-100 {
+  background-color: rgba(37, 99, 235, 0.22) !important;
+}
+
+.dark .shadow-sm,
+.dark .shadow-xl,
+.dark .shadow-2xl {
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35) !important;
+}
